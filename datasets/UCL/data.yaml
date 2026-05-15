@@ -1,0 +1,8 @@
+path: C:/Users/Usuario/Documents/FACULDADE/code/datasets/UCL
+train: train
+val: valid
+nc: 3
+names:
+- Lata
+- Garrafa
+- Papel

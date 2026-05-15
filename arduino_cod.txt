@@ -1,0 +1,140 @@
+#include <Stepper.h>
+#include <Servo.h>
+
+const int ledPin = 13;
+
+// ─────────────────────────────────────────
+// CONFIGURAÇÃO DO MOTOR DE PASSO
+// ─────────────────────────────────────────
+const int PASSOS_VOLTA = 2048; // Total de passos para 360°
+// Ordem dos pinos ajustada (8, 10, 9, 11). Inverta se girar apenas para um lado.
+Stepper motor_passo(PASSOS_VOLTA, 8, 10, 9, 11);
+
+// Definição de pulsos do motor de passo para alinhar o prato seletor
+const int PULSOS_90 = 512;   // 90 graus para um lado
+const int PULSOS_180 = 1024; // 180 graus (meia volta)
+
+// ─────────────────────────────────────────
+// CONFIGURAÇÃO DO SERVO MOTOR (TAMPA)
+// ─────────────────────────────────────────
+Servo servoTampa;
+const int pinServo = 6; // ATENÇÃO: Mudei para o pino 7 para não chocar com o motor de passo
+int velocidadeDelay = 20; 
+int posicaoAtualServo = 90; // Posição de repouso (Tampa Fechada)
+
+// Tempo que a tampa fica aberta aguardando o descarte (em milissegundos)
+const int TEMPO_ABERTO = 2500; 
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(ledPin, OUTPUT);
+  
+  // Inicializa o Motor de Passo
+  motor_passo.setSpeed(14); // Velocidade rápida e estável para o prato
+  
+  // Inicializa o Servo Motor
+  servoTampa.attach(pinServo);
+  servoTampa.write(posicaoAtualServo); // Garante que a tampa inicia fechada em 90°
+  
+  Serial.println("--- Sistema de Triagem Duplo Ativo (Passo + Servo) ---");
+  Serial.println("Aguardando comandos da IA...");
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    char comando = Serial.read();
+    
+    // 1. GARRAFA
+    if (comando == '1') {
+      digitalWrite(ledPin, HIGH);
+      Serial.println("🔄 [CICLO] Garrafa Detectada");
+      
+      // Passo A: Gira o prato (Motor de Passo)
+      motor_passo.step(2048);
+      
+      // Passo B: Abre a tampa (Servo) -> vai para 120° rápido (passo 2)
+      moverServoSuave(120, 2);
+      
+      // Passo C: Espera o objeto cair
+      delay(TEMPO_ABERTO);
+      
+      // Passo D: Fecha a tampa (Servo) -> volta para 90° suave (passo 1)
+      moverServoSuave(60, 1);
+      
+      // Passo E: Retorna o prato à posição inicial (Motor de Passo inverso)
+      motor_passo.step(-2048);
+      
+      Serial.println("✅ [CICLO] Concluído");
+      digitalWrite(ledPin, LOW);
+    } 
+    
+    // 2. LATA
+    else if (comando == '2') {
+      digitalWrite(ledPin, HIGH);
+      Serial.println("🔄 [CICLO] Lata Detectada");
+      
+      // Passo A: Gira o prato para o outro lado
+      motor_passo.step(-PULSOS_90);
+      
+      // Passo B: Abre a tampa -> vai para 60° suave (passo 1)
+      moverServoSuave(120, 2);
+      
+      delay(TEMPO_ABERTO);
+      
+      // Passo C: Fecha a tampa -> volta para 90°
+      moverServoSuave(60, 1);
+      
+      // Passo D: Retorna o prato à posição inicial
+      motor_passo.step(PULSOS_90);
+      
+      Serial.println("✅ [CICLO] Concluído");
+      digitalWrite(ledPin, LOW);
+    } 
+    
+    // 3. PAPEL
+    else if (comando == '3') {
+      digitalWrite(ledPin, HIGH);
+      Serial.println("🔄 [CICLO] Papel Detectado");
+      
+      // Passo A: Gira o prato 180 graus
+      motor_passo.step(PULSOS_180);
+      
+      // Passo B: Abre a tampa -> vai para 0° suave (passo 1)
+      moverServoSuave(120, 2);
+      
+      delay(TEMPO_ABERTO);
+      
+      // Passo C: Fecha a tampa -> volta para 90°
+      moverServoSuave(60, 1);
+      
+      // Passo D: Retorna o prato à posição inicial
+      motor_passo.step(-PULSOS_180);
+      
+      Serial.println("✅ [CICLO] Concluído");
+      digitalWrite(ledPin, LOW);
+    }
+    
+    // Limpa qualquer comando que tenha acumulado no buffer durante o movimento mecânico
+    while(Serial.available() > 0) Serial.read(); 
+  }
+}
+
+// ─────────────────────────────────────────
+// FUNÇÃO DE MOVIMENTAÇÃO SUAVE DO SERVO
+// ─────────────────────────────────────────
+void moverServoSuave(int anguloDestino, int passo) {
+  if (anguloDestino > posicaoAtualServo) {
+    for (int pos = posicaoAtualServo; pos <= anguloDestino; pos += passo) {
+      servoTampa.write(pos);
+      delay(velocidadeDelay);
+    }
+  } 
+  else {
+    for (int pos = posicaoAtualServo; pos >= anguloDestino; pos -= passo) {
+      servoTampa.write(pos);
+      delay(velocidadeDelay);
+    }
+  }
+  servoTampa.write(anguloDestino); // Garante o alinhamento final exato
+  posicaoAtualServo = anguloDestino; 
+}
